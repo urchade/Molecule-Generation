@@ -1,31 +1,35 @@
-import matplotlib.pyplot as plt
-import seaborn as sns
+from torch.utils.data import Dataset
 
 path = r'data\smiles_train.txt'
 
-molecules = []
-with open(path, 'r') as file:
-    for line in file:
-        molecules.append(line.strip('\n'))
 
-combined = ''.join(molecules)
+class MolDataset(Dataset):
+    def __init__(self, filepath):
 
-# 0 for padding, 1 for <sos>, 2 for <eos>
-id2char = dict(enumerate(set(combined), start=3))
-id2char[1] = '<sos>'
-id2char[2] = '<eos>'
+        list_molecules = []
 
-char2id = {v: k for k, v in id2char.items()}
+        with open(filepath, 'r') as file:
+            for mol in file:
+                list_molecules.append(mol.strip('\n'))
 
-id_molecules = [[char2id[char] for char in molecule] for molecule in molecules]
+        self.len_data = len(list_molecules)
+        all_combined = ''.join(list_molecules)
 
-for i in range(len(id_molecules)):
-    id_molecules[i].append(2)  # Insert <eos> at the end
-    id_molecules[i].insert(0, 1)  # Insert <sos> at the start
+        # 0 for padding, 1 for <sos>, 2 for <eos>
+        self.id2char = dict(enumerate(set(all_combined), start=2))
+        self.id2char[0] = '<sos>'
+        self.id2char[1] = '<eos>'
 
-len_mol = []
-for mol in id_molecules:
-    len_mol.append(len(mol))
+        self.char2id = {v: k for k, v in self.id2char.items()}
 
-sns.distplot(len_mol)
-plt.show()
+        self.id_molecules = [[self.char2id[char] for char in molecule] for molecule in list_molecules]
+
+        for i in range(self.len_data):
+            self.id_molecules[i].append(1)  # Insert <eos> at the end
+            self.id_molecules[i].insert(0, 0)  # Insert <sos> at the start
+
+    def __len__(self):
+        return self.len_data
+
+    def __getitem__(self, item):
+        pass
