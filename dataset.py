@@ -1,10 +1,13 @@
 from torch.utils.data import Dataset
-
-path = r'data\smiles_train.txt'
+from widis_lstm_tools.preprocessing import inds_to_one_hot
+import numpy as np
+import torch
 
 
 class MolDataset(Dataset):
-    def __init__(self, filepath):
+    def __init__(self, filepath, seq_len):
+
+        self.seq_len = seq_len
 
         list_molecules = []
 
@@ -28,8 +31,21 @@ class MolDataset(Dataset):
             self.id_molecules[i].append(1)  # Insert <eos> at the end
             self.id_molecules[i].insert(0, 0)  # Insert <sos> at the start
 
+        self.combined = np.array([char for mols in self.id_molecules for char in mols])
+
     def __len__(self):
-        return self.len_data
+        return self.len_data//self.seq_len
 
     def __getitem__(self, item):
-        pass
+
+        x = inds_to_one_hot(self.combined[item*self.seq_len: item*self.seq_len + self.seq_len],
+                            len(self.id2char))
+
+        y = self.combined[item*self.seq_len + self.seq_len]
+
+        return x, y
+
+
+
+
+
