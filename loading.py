@@ -16,28 +16,30 @@ device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
 
 # load dataset
 filepath = r'data\smiles_train.txt'
-data = MolDataset(filepath, 50)
+data = MolDataset(filepath, 100)
 
 # data splitting
 train_data, test_data = random_dataset_split(data, split_sizes=(90 / 100., 10 / 100))
 
 # data loader
-train_loader = DataLoader(train_data, batch_size=128, shuffle=True, drop_last=True)
-test_loader = DataLoader(test_data, batch_size=64, shuffle=True, drop_last=True)
+train_loader = DataLoader(train_data, batch_size=128, shuffle=True)
+test_loader = DataLoader(test_data, batch_size=64, shuffle=True)
 
 # model
-model = MolModel(n_inputs=len(data.id2char), hidden_size=64)
+model = MolModel(n_inputs=len(data.id2char), hidden_size=128)
 model = model.to(device)
 criterion = nn.CrossEntropyLoss()
 
 optimizer = torch.optim.Adam(model.parameters(), 0.01)
-
+scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer,
+                                                 milestones=[20, 30, 40],
+                                                 gamma=0.5)
 # training
-train(model, optimizer, criterion, 10, train_loader,
-      test_loader)
+train(model, optimizer, criterion, 50, train_loader,
+      test_loader, scheduler=scheduler)
 
 model.cpu()
-
+model.eval()
 
 @torch.no_grad()
 def transform(idx):
@@ -104,14 +106,14 @@ def generate_molecules(n=10000, k=5):
 
 # torch.save({'model': model.state_dict()}, 'trained_models\model.pt')
 
-model.load_state_dict(torch.load('trained_models\model.pt')['model'])
+# model.load_state_dict(torch.load('model.pt'))
 
-generated = generate_molecules(100, k=5)
+generated = generate_molecules(10000, k=3)
 generated_can = [canonicalize(gen) for gen in generated]
 
 lon_ = [g for g in generated_can if len(g) > 80]
 
-with open('results/third_submission.txt', 'a') as f:
+with open('results/fifth_submission.txt', 'a') as f:
     for mol in generated_can:
         f.write(mol)
         f.write('\n')
