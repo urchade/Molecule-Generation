@@ -9,8 +9,9 @@ def evaluate(model, data, criterion):
     device = next(model.parameters()).device
 
     for x, y in tqdm(data, leave=False):
+        batch_size, seq_len, _ = x.shape
         y_hat, _ = model(x.to(device))
-        loss = criterion(y_hat.transpose(1, 2), y.long().to(device))
+        loss = criterion(y_hat, y.view(batch_size*seq_len).long().to(device))
         losses.append(loss.item())
 
     return np.mean(losses)
@@ -23,10 +24,11 @@ def update(model, data, criterion,
     device = next(model.parameters()).device
 
     for x, y in tqdm(data, leave=False):
-        optimizer.zero_grad()
+        batch_size, seq_len, _ = x.shape
         y_hat, _ = model.forward(x.to(device))
-        loss = criterion(y_hat.transpose(1, 2), y.long().to(device))
+        loss = criterion(y_hat, y.long().reshape(batch_size*seq_len).to(device))
         losses.append(loss.item())
+        optimizer.zero_grad()
         loss.backward()
         optimizer.step()
 

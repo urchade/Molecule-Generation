@@ -9,30 +9,32 @@ from widis_lstm_tools.preprocessing import random_dataset_split, inds_to_one_hot
 from dataset import MolDataset
 from model import MolModel
 from train import train
+from canonicalize import canonicalize
 
 # device
 device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
 
 # load dataset
 filepath = r'data\smiles_train.txt'
-data = MolDataset(filepath, 100)
+data = MolDataset(filepath, 50)
 
 # data splitting
 train_data, test_data = random_dataset_split(data, split_sizes=(90 / 100., 10 / 100))
 
 # data loader
-train_loader = DataLoader(train_data, batch_size=128, shuffle=True)
-test_loader = DataLoader(test_data, batch_size=64, shuffle=True)
+train_loader = DataLoader(train_data, batch_size=128, shuffle=True, drop_last=True)
+test_loader = DataLoader(test_data, batch_size=64, shuffle=True, drop_last=True)
 
 # model
-model = MolModel(n_inputs=len(data.id2char), hidden_size=64).to(device)
+model = MolModel(n_inputs=len(data.id2char), hidden_size=64)
+model = model.to(device)
 criterion = nn.CrossEntropyLoss()
+
 optimizer = torch.optim.Adam(model.parameters(), 0.01)
-scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=2, gamma=0.2)
 
 # training
 train(model, optimizer, criterion, 10, train_loader,
-      test_loader, scheduler=scheduler)
+      test_loader)
 
 model.cpu()
 
@@ -51,7 +53,7 @@ def transform(idx):
 def generate_one_mol(x=0, k=2):
     x = transform(x)
 
-    out, hiddens = model.forward(x)
+    out, hidden_states = model.forward(x)
 
     topk = torch.topk(out, k=k)
 
@@ -66,7 +68,7 @@ def generate_one_mol(x=0, k=2):
     molecule = [data.id2char[pred]]
 
     while True:
-        out, hiddens = model.forward(inputs, hiddens)
+        out, hidden_states = model.forward(inputs, hidden_states)
 
         topk = torch.topk(out, k=k)
 
@@ -86,23 +88,30 @@ def generate_one_mol(x=0, k=2):
 
 
 def generate_molecules(n=10000, k=5):
-    generated = []
+    list_generated = []
     for _ in tqdm(range(n)):
         while True:
-            molecule = generate_one_mol(n=n, k=k)
+            molecule = generate_one_mol(x=0, k=k)
 
             valid_test = Chem.MolFromSmiles(molecule)
 
-            if valid_test is not None and molecule not in generated and molecule not in data.list_molecules:
-                print(len(generated))
-                generated.append(molecule)
+            if valid_test is not None and molecule not in list_generated and molecule not in data.list_molecules:
+                print(len(list_generated))
+                list_generated.append(molecule)
                 break
-    return generated
+    return list_generated
 
 
-generated = generate_molecules(10000)
+# torch.save({'model': model.state_dict()}, 'trained_models\model.pt')
 
-with open('results/sub.txt', 'a') as f:
-    for mol in generated:
+model.load_state_dict(torch.load('trained_models\model.pt')['model'])
+
+generated = generate_molecules(100, k=5)
+generated_can = [canonicalize(gen) for gen in generated]
+
+lon_ = [g for g in generated_can if len(g) > 80]
+
+with open('results/third_submission.txt', 'a') as f:
+    for mol in generated_can:
         f.write(mol)
         f.write('\n')
