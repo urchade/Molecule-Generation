@@ -1,5 +1,5 @@
+import torch
 from torch import nn
-from widis_lstm_tools.nn import LSTMLayer
 
 
 class MolModel(nn.Module):
@@ -7,13 +7,23 @@ class MolModel(nn.Module):
         super().__init__()
 
         self.hidden_size = hidden_size
-
-        self.rnn = nn.LSTM(n_inputs, hidden_size, batch_first=True)
-
+        self.rnn = nn.LSTMCell(n_inputs, hidden_size)
         self.linear = nn.Linear(hidden_size, n_inputs)
 
-    def forward(self, x, hidden=None):
+    def forward(self, x, hidden_states=None):
+        x = x.transpose(0, 1)  # (seq, batch, size)
 
-        _, (h, c) = self.rnn(x, hidden)
+        outputs = []
 
-        return self.linear(h.view(-1, self.hidden_size)), (h, c)
+        for x_t in x:
+            h, c = self.rnn(x_t, hidden_states)
+
+            hidden_states = h, c
+
+            out = self.linear(h.view(-1, self.hidden_size))
+
+            outputs.append(out)
+
+        outputs = torch.stack(outputs)
+
+        return outputs.transpose(0, 1), hidden_states

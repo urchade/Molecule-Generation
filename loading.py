@@ -1,50 +1,65 @@
+import numpy as np
 import torch
+from rdkit import Chem
 from torch import nn
 from torch.utils.data import DataLoader
+from tqdm import tqdm
 from widis_lstm_tools.preprocessing import random_dataset_split, inds_to_one_hot
 
 from dataset import MolDataset
 from model import MolModel
-import numpy as np
+from train import train
 
+# device
+device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+
+# load dataset
 filepath = r'data\smiles_train.txt'
-
 data = MolDataset(filepath, 100)
 
+# data splitting
 train_data, test_data = random_dataset_split(data, split_sizes=(90 / 100., 10 / 100))
 
-train_loader = DataLoader(train_data, batch_size=64, shuffle=True)
+# data loader
+train_loader = DataLoader(train_data, batch_size=128, shuffle=True)
+test_loader = DataLoader(test_data, batch_size=64, shuffle=True)
 
-model = MolModel(n_inputs=len(data.id2char), hidden_size=32)
-
+# model
+model = MolModel(n_inputs=len(data.id2char), hidden_size=64).to(device)
 criterion = nn.CrossEntropyLoss()
-optimizer = torch.optim.Adam(model.parameters(), 0.001)
+optimizer = torch.optim.Adam(model.parameters(), 0.01)
+scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=2, gamma=0.2)
 
-for i in range(20):
-    losses = []
-    for x, y in train_loader:
-        optimizer.zero_grad()
-        y_hat, _ = model(x)
-        loss = criterion(y_hat, y.long())
-        loss.backward()
-        optimizer.step()
-        losses.append(loss.item())
-    print(np.mean(losses))
+# training
+train(model, optimizer, criterion, 10, train_loader,
+      test_loader, scheduler=scheduler)
+
+model.cpu()
 
 
 @torch.no_grad()
-def transform(integer):
-    integer = inds_to_one_hot(np.array(integer), len(data.id2char))
-    return torch.Tensor(integer).reshape(1, 1, 40)
+def transform(idx):
+    # one_hot encoding
+    idx = inds_to_one_hot(np.array(idx), len(data.id2char))
+
+    # (batch_size, seq_len, input_size)
+    idx = torch.Tensor(idx).reshape(1, 1, len(data.id2char))
+    return idx
 
 
 @torch.no_grad()
-def pred_next(x=0):
+def generate_one_mol(x=0, k=2):
     x = transform(x)
 
     out, hiddens = model.forward(x)
 
-    pred = torch.argmax(out).item()
+    topk = torch.topk(out, k=k)
+
+    topk_prob = torch.softmax(topk[0].squeeze(), dim=-1).numpy()
+
+    topk_ids = topk[1].squeeze().numpy()
+
+    pred = np.random.choice(topk_ids, p=topk_prob)
 
     inputs = transform(pred)
 
@@ -53,9 +68,13 @@ def pred_next(x=0):
     while True:
         out, hiddens = model.forward(inputs, hiddens)
 
-        topk = torch.topk(out, 3)[1].squeeze().numpy()
+        topk = torch.topk(out, k=k)
 
-        out_id = np.random.choice(topk)
+        topk_prob = torch.softmax(topk[0].squeeze(), dim=-1).numpy()
+
+        topk_ids = topk[1].squeeze().numpy()
+
+        out_id = np.random.choice(topk_ids, p=topk_prob)
 
         if out_id == 1:
             break
@@ -63,11 +82,27 @@ def pred_next(x=0):
         inputs = transform(out_id)
         molecule.append(data.id2char[out_id])
 
-    return molecule
+    return ''.join(molecule)
 
 
-from rdkit import Chem
+def generate_molecules(n=10000, k=5):
+    generated = []
+    for _ in tqdm(range(n)):
+        while True:
+            molecule = generate_one_mol(n=n, k=k)
 
-mll = pred_next()
-m = Chem.MolFromSmiles(''.join(mll))
+            valid_test = Chem.MolFromSmiles(molecule)
 
+            if valid_test is not None and molecule not in generated and molecule not in data.list_molecules:
+                print(len(generated))
+                generated.append(molecule)
+                break
+    return generated
+
+
+generated = generate_molecules(10000)
+
+with open('results/sub.txt', 'a') as f:
+    for mol in generated:
+        f.write(mol)
+        f.write('\n')
