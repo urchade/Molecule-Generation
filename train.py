@@ -1,3 +1,8 @@
+"""train.py
+Author: Urchade Zaratiana
+AI in life sciences
+Challenge 2
+"""
 import numpy as np
 import torch
 from tqdm import tqdm
@@ -55,6 +60,7 @@ def train(model, optimizer, criterion, epoch, train_data, test_data,
             train_losses.append(train_loss)
             valid_losses.append(valid_loss)
 
+            # saving the model that have the best validation
             if valid_loss < best_model:
                 best_model = valid_loss
                 torch.save(model.state_dict(), 'model.pt')

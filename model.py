@@ -1,7 +1,14 @@
+"""model.py
+Author: Urchade Zaratiana
+AI in life sciences
+Challenge 2
+"""
+
 import torch
 from torch import nn
 
-class MolModel(nn.Module):
+
+class MoLSTM(nn.Module):
     def __init__(self, n_inputs, hidden_size):
         super().__init__()
 
@@ -12,11 +19,10 @@ class MolModel(nn.Module):
         self.linear = nn.Linear(hidden_size, n_inputs)
 
     def forward(self, x, hidden_states=None):
-
         batch_size, seq_len, _ = x.shape
 
         outs, hidden_states = self.rnn(x, hidden_states)
         outs = torch.relu(outs)
-        outs = outs.contiguous().view(batch_size*seq_len, self.hidden_size)
+        outs = outs.contiguous().view(batch_size * seq_len, self.hidden_size)
 
         return self.linear(outs), hidden_states
